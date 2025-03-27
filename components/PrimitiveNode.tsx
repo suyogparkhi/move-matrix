@@ -7,10 +7,11 @@ import { Primitive } from '../lib/types';
 interface PrimitiveNodeData {
   primitive: Primitive;
   onSelect: () => void;
+  debug?: boolean;
 }
 
 const PrimitiveNode = memo(({ data, selected }: NodeProps<PrimitiveNodeData>) => {
-  const { primitive, onSelect } = data;
+  const { primitive, onSelect, debug = false } = data;
   
   // Define color based on primitive type
   const typeColorMap: Record<string, string> = {
@@ -35,16 +36,24 @@ const PrimitiveNode = memo(({ data, selected }: NodeProps<PrimitiveNodeData>) =>
       {/* Input Handles */}
       <div className="mb-4">
         {primitive.inputs && primitive.inputs.map((input, index) => (
-          <div key={input.id} className="relative mb-2 last:mb-0">
+          <div key={input.id} className="relative mb-3 last:mb-0 group">
             <Handle
               id={input.id}
               type="target"
               position={Position.Left}
-              className="w-3 h-3 !bg-blue-500"
-              style={{ top: `${index * 20 + 10}px` }}
+              className="w-4 h-4 !bg-blue-500 hover:!w-5 hover:!h-5 hover:!bg-blue-600 transition-all !border-2 !border-white shadow-lg hover:shadow-xl !left-[-6px]"
+              style={{ top: `${index * 28 + 12}px` }}
               isConnectable={true}
+              data-tooltip-id={`handle-tooltip-${input.id}`}
+              data-tooltip-content={`Input: ${input.resourceType}`}
             />
-            <div className="pl-4 text-sm">{input.label}</div>
+            <div className="pl-4 text-sm flex items-center">
+              <span className="text-xs font-medium text-blue-600 px-1 bg-blue-100 rounded mr-2">{input.resourceType}</span>
+              <span className="group-hover:font-medium transition-all">{input.label}</span>
+              {debug && (
+                <span className="ml-1 text-xs text-gray-500">[ID: {input.id}]</span>
+              )}
+            </div>
           </div>
         ))}
         {(!primitive.inputs || primitive.inputs.length === 0) && (
@@ -55,15 +64,23 @@ const PrimitiveNode = memo(({ data, selected }: NodeProps<PrimitiveNodeData>) =>
       {/* Output Handles */}
       <div>
         {primitive.outputs && primitive.outputs.map((output, index) => (
-          <div key={output.id} className="relative mb-2 last:mb-0 text-right">
-            <div className="pr-4 text-sm">{output.label}</div>
+          <div key={output.id} className="relative mb-3 last:mb-0 text-right group">
+            <div className="pr-4 text-sm flex items-center justify-end">
+              {debug && (
+                <span className="mr-1 text-xs text-gray-500">[ID: {output.id}]</span>
+              )}
+              <span className="group-hover:font-medium transition-all">{output.label}</span>
+              <span className="text-xs font-medium text-green-600 px-1 bg-green-100 rounded ml-2">{output.resourceType}</span>
+            </div>
             <Handle
               id={output.id}
               type="source"
               position={Position.Right}
-              className="w-3 h-3 !bg-green-500"
-              style={{ top: `${index * 20 + 10}px` }}
+              className="w-4 h-4 !bg-green-500 hover:!w-5 hover:!h-5 hover:!bg-green-600 transition-all !border-2 !border-white shadow-lg hover:shadow-xl !right-[-6px]"
+              style={{ top: `${index * 28 + 12}px` }}
               isConnectable={true}
+              data-tooltip-id={`handle-tooltip-${output.id}`}
+              data-tooltip-content={`Output: ${output.resourceType}`}
             />
           </div>
         ))}
@@ -71,6 +88,16 @@ const PrimitiveNode = memo(({ data, selected }: NodeProps<PrimitiveNodeData>) =>
           <div className="text-xs text-gray-500 italic">No outputs</div>
         )}
       </div>
+      
+      {/* Debug information */}
+      {debug && (
+        <div className="mt-3 pt-2 border-t border-gray-200 text-xs bg-amber-50 p-1 rounded">
+          <div className="text-amber-800 font-medium">Debug Info:</div>
+          <div className="text-gray-600">ID: {primitive.id}</div>
+          <div className="text-gray-600">Type: {primitive.type}</div>
+          <div className="text-gray-600">Position: ({primitive.position.x}, {primitive.position.y})</div>
+        </div>
+      )}
       
       {/* Parameters preview */}
       {Object.keys(primitive.parameters || {}).length > 0 && (

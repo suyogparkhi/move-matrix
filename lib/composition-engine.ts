@@ -153,12 +153,15 @@ export function createCompositionEngine(initialComposition?: Composition): Compo
     // Find source and target ports to get their resource types
     let sourcePort = null;
     let targetPort = null;
+    let sourcePrimitiveId = '';
+    let targetPrimitiveId = '';
 
     // Find source port
     for (const primitive of Object.values(composition.primitives)) {
       for (const output of primitive.outputs) {
         if (output.id === sourcePortId) {
           sourcePort = output;
+          sourcePrimitiveId = primitive.id;
           break;
         }
       }
@@ -170,19 +173,47 @@ export function createCompositionEngine(initialComposition?: Composition): Compo
       for (const input of primitive.inputs) {
         if (input.id === targetPortId) {
           targetPort = input;
+          targetPrimitiveId = primitive.id;
           break;
         }
       }
       if (targetPort) break;
     }
 
-    // Check if ports are found and compatible
+    // Check if ports are found
     if (!sourcePort || !targetPort) {
+      console.error('Connection failed: Source or target port not found', {
+        sourcePortId,
+        targetPortId,
+        sourcePortFound: !!sourcePort,
+        targetPortFound: !!targetPort
+      });
+      return null;
+    }
+
+    // Check if trying to connect to self
+    if (sourcePrimitiveId === targetPrimitiveId) {
+      console.error('Connection failed: Cannot connect a primitive to itself');
+      return null;
+    }
+
+    // Check if a connection already exists between these ports
+    const existingConnection = Object.values(composition.connections).find(
+      conn => conn.sourcePortId === sourcePortId && conn.targetPortId === targetPortId
+    );
+    if (existingConnection) {
+      console.error('Connection failed: Connection already exists between these ports');
       return null;
     }
 
     // Check if resource types are compatible
-    if (sourcePort.resourceType !== targetPort.resourceType) {
+    // Instead of strict equality, check for compatibility
+    const areTypesCompatible = checkResourceTypeCompatibility(sourcePort.resourceType, targetPort.resourceType);
+    if (!areTypesCompatible) {
+      console.error('Connection failed: Incompatible resource types', {
+        sourceType: sourcePort.resourceType,
+        targetType: targetPort.resourceType
+      });
       return null;
     }
 
@@ -203,7 +234,79 @@ export function createCompositionEngine(initialComposition?: Composition): Compo
       updatedAt: new Date(),
     };
 
+    console.log('Connection created successfully', connection);
     return connection;
+  };
+
+  // Helper function to check if resource types are compatible
+  const checkResourceTypeCompatibility = (sourceType: string, targetType: string): boolean => {
+    // If exact match, they're compatible
+    if (sourceType === targetType) return true;
+    
+    // Normalize the types (lowercase for case-insensitive comparison)
+    const sourceTypeLower = sourceType.toLowerCase();
+    const targetTypeLower = targetType.toLowerCase();
+    
+    // If normalized match, they're compatible
+    if (sourceTypeLower === targetTypeLower) return true;
+
+    // Define compatibility rules for different resource types
+    const compatibilityRules: Record<string, string[]> = {
+      // Asset category
+      'asset': ['token', 'liquidity', 'coin', 'currency', 'collateral', 'stakeAsset', 'stakereceipt', 'receipt'],
+      'token': ['asset', 'liquidity', 'coin', 'currency', 'collateral', 'stakeAsset', 'stakereceipt', 'receipt'],
+      'coin': ['asset', 'token', 'liquidity', 'currency', 'collateral'],
+      'currency': ['asset', 'token', 'liquidity', 'coin', 'collateral'],
+      'liquidity': ['token', 'asset', 'coin', 'currency'],
+      'collateral': ['asset', 'token', 'coin', 'currency'],
+      
+      // Staking related
+      'stake': ['token', 'asset', 'stakeAsset'],
+      'stakeAsset': ['token', 'asset', 'stake'],
+      'stakeReceipt': ['receipt', 'token', 'asset'],
+      'receipt': ['stakeReceipt', 'token', 'asset', 'depositReceipt', 'loanReceipt'],
+      
+      // Loan related
+      'loan': ['asset', 'token', 'debt'],
+      'debt': ['loan', 'asset', 'token'],
+      'depositReceipt': ['receipt', 'token', 'asset'],
+      'loanReceipt': ['receipt', 'debt', 'loan'],
+      
+      // Yield related
+      'interest': ['yield', 'rewards', 'revenue'],
+      'yield': ['interest', 'rewards', 'revenue'],
+      'rewards': ['yield', 'interest', 'asset', 'token', 'revenue'],
+      'revenue': ['yield', 'interest', 'rewards', 'asset', 'token'],
+    };
+
+    // Check if target type is in the compatible list for source type
+    if (compatibilityRules[sourceTypeLower] && 
+        compatibilityRules[sourceTypeLower].some(t => t.toLowerCase() === targetTypeLower)) {
+      return true;
+    }
+
+    // Check if source type is in the compatible list for target type
+    if (compatibilityRules[targetTypeLower] && 
+        compatibilityRules[targetTypeLower].some(t => t.toLowerCase() === sourceTypeLower)) {
+      return true;
+    }
+    
+    // Handle partial matches (e.g. "stakeAsset" should match with "asset")
+    const partialMatch = (type1: string, type2: string): boolean => {
+      return type1.toLowerCase().includes(type2.toLowerCase()) || 
+             type2.toLowerCase().includes(type1.toLowerCase());
+    };
+    
+    // Check common types that should be compatible via partial matching
+    const commonTypes = ['asset', 'token', 'receipt', 'stake'];
+    for (const commonType of commonTypes) {
+      if ((sourceTypeLower.includes(commonType) || sourceTypeLower === commonType) &&
+          (targetTypeLower.includes(commonType) || targetTypeLower === commonType)) {
+        return true;
+      }
+    }
+
+    return false;
   };
 
   // Remove a connection
